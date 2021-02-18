@@ -1,22 +1,21 @@
 package kg.geektech.android3.lesson_7;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
 import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
-import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
@@ -37,17 +36,22 @@ public class MainActivity extends AppCompatActivity implements
         GoogleMap.OnCameraMoveListener {
 
     private final static int LOCATION_PERMISSION_CODE = 3;
-
     private GoogleMap map;
+    private Prefs prefs;
     private ActivityMainBinding ui;
-    private final List<LatLng> latLngList = new ArrayList<>();
+    private List<LatLng> latLngList;
+    private List<PolygonOptions> polygons;
+    private List<PolylineOptions> polylines;
+    public static String PREFS_KEY = "coords";
+    public static String POLYLINES_KEY = "polylines";
+    public static String POLYGONS_KEY = "polygons";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         ui = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(ui.getRoot());
-
+        prefs = new Prefs(getApplicationContext());
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
@@ -75,21 +79,24 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     public void onMapReady(GoogleMap googleMap) {
         map = googleMap;
+        latLngList = new ArrayList<>();
+        polylines = new ArrayList<>();
+        polygons = new ArrayList<>();
         if (ActivityCompat
                 .checkSelfPermission(
                         this,
                         Manifest.permission.ACCESS_FINE_LOCATION) ==
-                        PackageManager.PERMISSION_GRANTED &&
-                        ActivityCompat.
-                                checkSelfPermission(
-                                        this,
-                                        Manifest.permission.ACCESS_COARSE_LOCATION)
-                                == PackageManager.PERMISSION_GRANTED) {
+                PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.
+                        checkSelfPermission(
+                                this,
+                                Manifest.permission.ACCESS_COARSE_LOCATION)
+                        == PackageManager.PERMISSION_GRANTED) {
             map.setMyLocationEnabled(true);
         }
 
         /** Animate Camera */
-        CameraPosition position = CameraPosition.fromLatLngZoom(new LatLng(42.8788252,74.6210675), 15f);
+        CameraPosition position = CameraPosition.fromLatLngZoom(new LatLng(42.8788252, 74.6210675), 15f);
         CameraUpdate cameraUpdate = CameraUpdateFactory.newCameraPosition(position);
         map.animateCamera(cameraUpdate);
 
@@ -102,29 +109,39 @@ public class MainActivity extends AppCompatActivity implements
         ui.btnMapHybrid.setOnClickListener(v -> map.setMapType(GoogleMap.MAP_TYPE_HYBRID));
         ui.btnMapNormal.setOnClickListener(v -> map.setMapType(GoogleMap.MAP_TYPE_NORMAL));
         ui.btnMapPolygon.setOnClickListener(v -> {
-            PolygonOptions polygonOptions = new PolygonOptions().addAll(latLngList);
+            PolygonOptions polygonOptions = new PolygonOptions();
+            polygonOptions.addAll(latLngList);
+            polygonOptions.fillColor(Color.GREEN);
             polygonOptions.strokeColor(Color.RED);
             polygonOptions.strokeWidth(3f);
-            polygonOptions.fillColor(Color.BLUE);
             map.addPolygon(polygonOptions);
+            polygons.add(polygonOptions);
         });
         ui.btnMapPolyline.setOnClickListener(v -> {
             PolylineOptions polylineOptions = new PolylineOptions();
             polylineOptions.addAll(latLngList);
             map.addPolyline(polylineOptions);
+            polylines.add(polylineOptions);
+        });
+        ui.btnClear.setOnClickListener(view -> {
+            clearMap();
+        });
+        ui.btnLoad.setOnClickListener(view -> {
+            loadMap();
         });
     }
 
+
     @Override
     public void onMapClick(LatLng latLng) {
-        latLngList.add(latLng);
+        addMarker(latLng);
+    }
+
+    private void addMarker(LatLng latLng) {
         MarkerOptions markerOptions = new MarkerOptions()
-                .position(latLng)
-                .title("Marker")
-                .draggable(true);
-//                .anchor(1, 0.7f)
-//                .icon(BitmapDescriptorFactory.fromResource(R.drawable.arrow2));
+                .position(latLng);
         map.addMarker(markerOptions);
+        latLngList.add(latLng);
     }
 
     @Override
@@ -137,4 +154,48 @@ public class MainActivity extends AppCompatActivity implements
     public void onCameraMove() {
         Toast.makeText(this, "CAMERA MOVED", Toast.LENGTH_SHORT).show();
     }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        //loadMap();
+        Toast.makeText(this, "salam", Toast.LENGTH_SHORT).show();
+
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        prefs.putCoords(PREFS_KEY, latLngList);
+        prefs.putPolyLines(POLYLINES_KEY, polylines);
+        prefs.putPolygons(POLYGONS_KEY, polygons);
+
+    }
+    private void loadMap() {
+        latLngList = prefs.getCoords(PREFS_KEY);
+        polylines = prefs.getPolyLines(POLYLINES_KEY);
+        polygons = prefs.getPolygons(POLYGONS_KEY);
+        if (!latLngList.isEmpty()) {
+            for (int i = 0; i < latLngList.size(); i++) {
+                MarkerOptions markerOptions = new MarkerOptions();
+                markerOptions.position(latLngList.get(i));
+                markerOptions.icon(BitmapDescriptorFactory.fromResource(R.drawable.marker_icon));
+                map.addMarker(markerOptions);
+            }
+            for (int i = 0; i < polylines.size(); i++) {
+                map.addPolyline(polylines.get(i));
+            }
+            for (int i = 0; i < polygons.size(); i++) {
+                map.addPolygon(polygons.get(i));
+            }
+        }
+    }
+
+    private void clearMap() {
+        prefs.clearPrefs();
+        map.clear();
+    }
+
+
+
 }
